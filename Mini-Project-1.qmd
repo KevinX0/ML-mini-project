@@ -17,7 +17,7 @@ include-before-body:
       breaklines
     }
 ---
-
+**Partnered with Jae Hu**
 ```{python}
 import pandas as pd
 import numpy as np
@@ -230,7 +230,7 @@ predicted_ln_incwage_fixed.tolist(), predicted_income_fixed.tolist()
 ```
 
 ### (d)
-- Yes, individuals with college degrees have higher predicted wages than those without. college graduates earn approximately $10,877 more per year ($23,043 - 12,166). This large wage gap is due to higher returns to education for college graduates. 
+- Yes, individuals with college degrees have higher predicted wages than those without. college graduates earn approximately $10,418 more per year ($22,900 - 12,482). This large wage gap is due to higher returns to education for college graduates. 
 
 ### (e)
 - Yes, the model provides strong evidence that college graduates earn significantly more than those with only a high school diploma, with a predicted 89% wage increase at age 22. This suggests that expanding access to college could improve earnings potential for many individuals. 
