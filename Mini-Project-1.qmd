@@ -18,7 +18,283 @@ include-before-body:
     }
 ---
 
+```{python}
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+from patsy import dmatrix
+from scipy.interpolate import CubicSpline
+from statsmodels.regression.linear_model import OLS
+```
 
+# 3
+### (a)
+```{python}
+crosswalk_path = "/Users/kevinxu/Documents/GitHub/ML-mini-project/PPHA_30545_MP01-Crosswalk.csv"
+acs_data_path = "/Users/kevinxu/Documents/GitHub/ML-mini-project/usa_00002.csv"
+crosswalk_df = pd.read_csv(crosswalk_path)
+acs_df = pd.read_csv(acs_data_path, low_memory=False)
+crosswalk_df.head(), acs_df.head()
 
+# merge ACS data with crosswalk file
+acs_df = acs_df.merge(crosswalk_df, left_on="EDUCD",
+                      right_on="educd", how="left")
+# drop the duplicate column
+acs_df.drop(columns=["educd"], inplace=True)
+acs_df.head()
+```
 
+### (b)
+```{python}
+# education dummies
+hsdiploma_codes = [62, 63, 64, 81, 82, 83]
+bachelors_or_higher_codes = [101, 114, 115, 116]
+acs_df['hsdip'] = acs_df['EDUCD'].apply(lambda x: 1 if x in hsdiploma_codes else (
+    0 if x in bachelors_or_higher_codes else None))
+acs_df['coldip'] = acs_df['EDUCD'].apply(
+    lambda x: 1 if x in bachelors_or_higher_codes else 0)
+# race dummies
+acs_df['white'] = (acs_df['RACED'] == 100).astype(int)
+acs_df['black'] = (acs_df['RACED'] == 200).astype(int)
+# hispanic dummy
+acs_df['hispanic'] = (acs_df['HISPAN'] > 0).astype(int)
+# marital status dummy
+acs_df['married'] = (acs_df['MARST'] == 1).astype(int)
+# gender dummy
+acs_df['female'] = (acs_df['SEX'] == 2).astype(int)
+# veteran status dummy
+acs_df['vet'] = (acs_df['VETSTAT'] == 2).astype(int)
+# display results
+acs_df[['hsdip', 'coldip', 'white', 'black',
+        'hispanic', 'married', 'female', 'vet']].head()
+```
 
+### (c)
+```{python}
+# creating interaction terms
+acs_df['hsdip_educdc'] = acs_df['hsdip'] * acs_df['educdc']
+acs_df['coldip_educdc'] = acs_df['coldip'] * acs_df['educdc']
+```
+
+### (d)
+```{python}
+# creating age squared variable and drop observations
+acs_df['age_sq'] = acs_df['AGE'] ** 2
+acs_df = acs_df[acs_df['INCWAGE'] > 0].copy()
+# creating the natural log of incwage
+acs_df['ln_incwage'] = np.log(acs_df['INCWAGE'])
+```
+
+# 4 Data Analysis Questions
+## (1)
+```{python}
+# selecting relevant variables
+variables = ['YEAR', 'INCWAGE', 'ln_incwage', 'educdc', 'female', 'AGE', 'age_sq',
+             'white', 'black', 'hispanic', 'married', 'NCHILD', 'vet', 'hsdip', 'coldip',
+             'hsdip_educdc', 'coldip_educdc']
+# computing summary statistics
+summary_stats = acs_df[variables].describe()
+# display results
+summary_stats
+```
+
+## (2)
+```{python}
+# create scatter plot
+plt.figure(figsize=(10, 6))
+sns.regplot(x=acs_df['educdc'], y=acs_df['ln_incwage'],
+            scatter_kws={'alpha': 0.3}, line_kws={'color': 'red'})
+plt.xlabel("Years of Education (educdc)")
+plt.ylabel("Log of Wage Income (ln_incwage)")
+plt.title("Scatter Plot of Log Wage Income vs. Years of Education")
+plt.show()
+```
+
+## (3)
+```{python}
+# define X and y
+X = acs_df[['educdc', 'female', 'AGE', 'age_sq', 'white', 'black', 'hispanic', 'married', 'NCHILD', 'vet']]
+y = acs_df['ln_incwage']
+X = sm.add_constant(X)
+# estimation via OLS regression
+model = sm.OLS(y, X).fit()
+model.summary()
+```
+
+- The regressions confirm that increased years of school have a significant positive impact in generating earnings, with a 10.4% increase in log earnings for an additional school year completed. Women earn 37% less than men, and Black individuals have 17.9% less earnings than counterparts, with no significant effect for Hispanic individuals. There is a positive but decreasing level of impact for age. Marriage increases earnings 18.7%, but having more children reduces earnings marginally. There is no significant effect of being a veteran in earnings. The model accounts for 28.9% of log earnings variation, with a fair fit, and largest coefficients in consonance with theoretical trends in economics.
+
+### (a)
+- The model explains 28.9% of the variation in log wages
+### (b)
+- The return to an additional year of education is 10.4%.This is statistically significant with a very low p-value. It is practically significant, with a 10.4% increase in earnings for an additional year of school having a real impact during a working life.
+
+### (c)
+```{python}
+beta_age = model.params['AGE']
+beta_age_sq = model.params['age_sq']
+age_max_wage = -beta_age / (2 * beta_age_sq)
+age_max_wage
+```
+
+- The model predicts that wages peak at approximately 47.6 years old. 
+
+### (d)
+- The model puts a prediction that males earn more than females, holding everything else constant. Holding years of school and everything else constant, females would earn about 37% less than males. There can be a variety of explanations for this gender wage gap, including variation in career, labour market discrimination, or variation in work life in terms of caregiving responsibilities.
+
+### (e)
+- White (\(\beta_5 = 0.0157\)): The coefficient is small and not statistically significant (\( p = 0.569 \)), meaning that being White does not have a meaningful impact on wages after controlling for education and other factors,.
+- Black (\(\beta_6 = -0.1797\)): The coefficient is negative and statistically significant (\( p < 0.001 \)), meaning that Black individuals earn about 17.9% less than others after controlling for education, age, and other variables. This suggests racial disparities in earnings that are not explained by the factors included in this model.
+
+## (4)
+```{python}
+# create a categorical variable
+def categorize_education(educ):
+    """Classify individuals into three education categories."""
+    if educ in hsdiploma_codes:
+        return "High School Diploma"
+    elif educ in bachelors_or_higher_codes:
+        return "College Degree"
+    else:
+        return "No High School Diploma"
+# categorize education levels
+acs_df['education_category'] = acs_df['EDUCD'].apply(categorize_education)
+
+# Plot ln(incwage) vs. education with separate linear fit lines for each category
+plt.figure(figsize=(10, 6))
+sns.lmplot(data=acs_df, x='educdc', y='ln_incwage', hue='education_category', 
+           palette='Set1', scatter_kws={'alpha': 0.3}, line_kws={'linewidth': 2}, height=6, aspect=1.5, ci=None)
+# customize plot 
+plt.xlabel("Years of Education (educdc)")
+plt.ylabel("Log of Wage Income (ln_incwage)")
+plt.title("Log Wage Income vs. Education with Linear Fit by Education Level")
+plt.grid(True)
+plt.show()
+```
+
+## (5)
+### (a)
+The model is:
+
+$$
+\ln(\text{incwage}) = \beta_0 + \beta_1 \text{educdc} + \beta_2 D_{\text{HS Dip}} + \beta_3 D_{\text{College}} + \beta_4 (\text{educdc} \times D_{\text{HS Dip}}) + \beta_5 (\text{educdc} \times D_{\text{College}})
+$$
+
+$$
++ \beta_6 \text{female} + \beta_7 \text{age} + \beta_8 \text{age}^2 + \beta_9 \text{white} + \beta_{10} \text{black} + \beta_{11} \text{hispanic} + \beta_{12} \text{married} + \beta_{13} \text{nchild} + \beta_{14} \text{vet} + \varepsilon
+$$
+
+- My model gives a real and clear picture of pay impact through its capacity to vary its return to education with level of highest attained degree. With high school and college-degree interaction terms, it considers that added years in school count for more at upper educational levels. Controls for gender, age, race, marriage, kids, and being a veteran have been included in an attempt not to confound any of these with the impact of education in terms of pay. The model is simple and flexible, preventing overfitting while still providing flexibility to reflect real-world wage patterns. 
+
+### (b)
+```{python}
+# creating education group dummy variables
+acs_df['hsdip_group'] = (acs_df['education_category'] == 'HS Diploma').astype(int)
+acs_df['coldip_group'] = (acs_df['education_category'] ==
+                          'College Degree').astype(int)
+# Creating interaction terms
+acs_df['hsdip_educdc'] = acs_df['hsdip_group'] * acs_df['educdc']
+acs_df['coldip_educdc'] = acs_df['coldip_group'] * acs_df['educdc']
+# define X and y
+X_interaction = acs_df[['educdc', 'hsdip_group', 'coldip_group', 'hsdip_educdc', 'coldip_educdc',
+                        'female', 'AGE', 'age_sq', 'white', 'black', 'hispanic',
+                        'married', 'NCHILD', 'vet']]
+y = acs_df['ln_incwage']
+X_interaction = sm.add_constant(X_interaction)
+# estimating the model
+interaction_model = sm.OLS(y, X_interaction).fit()
+# display results
+interaction_model.summary()
+```
+
+- The results shows that returns to education are dependent on the highest degree obtained. Individuals with a high school diploma earn 62% less than those without one. Each additional year of education increases wages by 6.8%. College graduates earn 49.9% less than those without a diploma, yet their wages increase by 8.4% for every additional year of education. The base education variable is not significant at p=0.913, which suggests that years of education alone do not effectively predict wages without considering obtained degree. These findings indicate that the economic value of education is closely linked to obtaining formal degrees rather than accumulating additional years of schooling.
+
+### (c)
+
+```{python}
+# ensure the feature order and count match the model
+expected_features = X_interaction.columns 
+# reconstruct the prediction dataframe 
+predict_df_fixed = pd.DataFrame(columns=expected_features)
+# dataframe with given values
+predict_df_fixed.loc[0] = [1, 12, 1, 0, 12, 0, 1, 22, 22**2, 0, 0, 0, 0, 0, 0]  
+predict_df_fixed.loc[1] = [1, 16, 0, 1, 0, 16, 1, 22, 22**2, 0, 0, 0, 0, 0, 0]  
+# generate predictions 
+predicted_ln_incwage_fixed = interaction_model.predict(predict_df_fixed)
+# convert log wage to actual wage
+predicted_income_fixed = np.exp(predicted_ln_incwage_fixed)
+predicted_ln_incwage_fixed.tolist(), predicted_income_fixed.tolist()
+
+```
+
+### (d)
+- Yes, individuals with college degrees have higher predicted wages than those without. college graduates earn approximately $10,877 more per year ($23,043 - 12,166). This large wage gap is due to higher returns to education for college graduates. 
+
+### (e)
+- Yes, the model provides strong evidence that college graduates earn significantly more than those with only a high school diploma, with a predicted 89% wage increase at age 22. This suggests that expanding access to college could improve earnings potential for many individuals. 
+
+### (f)
+- The model explains 31% of the variation in log wages. The result is higher than the result from the model from Question 3, which is 28.9%. So the new model have a better explaining power. 
+
+### (g)
+- I am moderatyly confident in the model considering the existence of limitations. The model explains 31% of the variation in log wages, so there is 69% of wage difference are driven by variables not included in the model. Additionally, the model assumes that past wage patterns will continue in the future, but labor market trends can change. 
+
+# 6
+### (a)
+```{python}
+# create cubic spline
+spline_basis = dmatrix("bs(AGE, knots=(18, 65), degree=3, include_intercept=False)",
+                       {"AGE": acs_df['AGE']}, return_type='dataframe')
+# define independent variables and the cubic spline
+X_spline = acs_df[['educdc', 'female', 'white', 'black',
+                   'hispanic', 'married', 'NCHILD', 'vet']].copy()
+# add variables
+X_spline = X_spline.join(spline_basis)
+# define y
+y = acs_df['ln_incwage']
+# add constant term
+X_spline = sm.add_constant(X_spline)
+# estimate the OLS model
+spline_model = sm.OLS(y, X_spline).fit()
+# show results
+adjusted_r2_spline = spline_model.rsquared_adj
+adjusted_r2_spline
+```
+
+### (b)
+The cubic spline improves model fit by better capturing nonlinear effects of age. But the change is so small, which means that age is not the main determinant of wage. 
+
+### (c)
+```{python}
+# define the spline formula
+spline_formula_24_55 = "ln_incwage ~ bs(AGE, knots=(24,55), degree=3) + educdc + female + white + black + hispanic + married + NCHILD + vet"
+spline_formula_40_60 = "ln_incwage ~ bs(AGE, knots=(40,60), degree=3) + educdc + female + white + black + hispanic + married + NCHILD + vet"
+# fit the models using regression
+model_spline_24_55 = smf.ols(spline_formula_24_55, data=acs_df).fit()
+model_spline_40_60 = smf.ols(spline_formula_40_60, data=acs_df).fit()
+# extract adjusted R-squared values
+adjusted_r2_spline_24_55 = model_spline_24_55.rsquared_adj
+adjusted_r2_spline_40_60 = model_spline_40_60.rsquared_adj
+
+adjusted_r2_spline_24_55, adjusted_r2_spline_40_60
+```
+
+- While both models perform similarly, the model with knots at 40 and 60 is preferred due to its marginally better predictive power and its alignment with wage patterns.
+
+### (d)
+```{python}
+# sort and remove duplicate ages 
+age_train_sorted, unique_indices = np.unique(acs_df['AGE'], return_index=True)
+ln_incwage_train_sorted = acs_df['ln_incwage'].iloc[unique_indices]
+# fit a cubic spline model with knots at 24 and 55
+spline_model = CubicSpline(age_train_sorted, ln_incwage_train_sorted, bc_type='natural')
+ages_to_predict = np.array([17, 50])
+# predict log income wage and convert log income back
+predicted_ln_incwage_spline = spline_model(ages_to_predict)
+predicted_income_spline = np.exp(predicted_ln_incwage_spline)
+predicted_ln_incwage_spline.tolist(), predicted_income_spline.tolist()
+```
+
+- The difference might occur because at age 17, the individual has a college diploma but little to no work experience, so lack of working experience limits her earnings. But at age 50, the individual has accumulated work experience, thus leading to higher earnings. On the other hand, the cubic spline makes the model to capture more non-linear income growth over time, which can explain the difference. 
